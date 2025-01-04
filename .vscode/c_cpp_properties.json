@@ -1,0 +1,17 @@
+{
+    "configurations": [
+      {
+        "name": "Linux",
+        "browse": {
+          "path": [
+            "${workspaceFolder}"
+          ],
+          "limitSymbolsToIncludedHeaders": true
+        },
+        "includePath": [
+          "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include"
+        ]
+      }
+    ],
+    "version": 4
+  }
