@@ -1,0 +1,9 @@
+# Pi 側 (Makefile) 生成物
+/obj/
+/bin/
+# Pico ファーム ビルド生成物
+firmware/**/build/
+*.uf2
+*.elf
+*.bin
+*.o

@@ -3,7 +3,22 @@
 Xbox ワイヤレスコントローラで **Freenove FNK0089**（Raspberry Pi Pico W 用
 メカナムホイールカー）を操縦するプロジェクト。
 
-## 概要
+## 2つの構成
+
+| | A. Pico W 自走（推奨・動作確認済み） | B. Raspberry Pi 経由 |
+|---|---|---|
+| 接続 | Xbox コン → **Bluetooth** → Pico W → モータ | Xbox コン → Pi(libevdev) → USB-CDC → Pico → モータ |
+| 走行時に Pi | **不要**（車体バッテリーで自走） | 必要（Pi が中継） |
+| 操作 | 左スティックで全方向移動＋右スティックで旋回（同時可） | D-Pad で前後/ストレイフ、LB/RB で旋回 |
+| 実装 | [`firmware/pico_w_bluepad32/`](firmware/pico_w_bluepad32/)（Bluepad32/C） | 下記＋[`firmware/pico_mecanum/`](firmware/pico_mecanum/)（Arduino/C） |
+
+**A（Pico W が Xbox コントローラと直接 BLE 接続して自走）** が実機で動作確認済みの
+本命構成です。ビルド・書き込み・ペアリング手順は
+[`firmware/pico_w_bluepad32/README.md`](firmware/pico_w_bluepad32/README.md) を参照。
+
+以下は **B（Raspberry Pi 経由）** の構成の説明です。
+
+## 概要（構成 B: Raspberry Pi 経由）
 
 Xbox コントローラ → Raspberry Pi（libevdev）→ USB-CDC シリアル →
 Pico（Freenove FNK0089）→ メカナム4輪。
