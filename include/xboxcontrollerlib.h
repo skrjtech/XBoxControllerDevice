@@ -40,12 +40,18 @@ struct xboxinfo {
     } controller;
 };
 
+// シリアルポート(Picoへのリンク)のデバイスパスを設定する。
+// XBoxControllerRun() の前に呼ぶこと。NULL または未設定の場合、Run() は
+// 既定で "/dev/ttyACM0"、それが無ければ "/dev/ttyACM1" を試す。
+// path は内部にコピーされる。
+void XBoxControllerSetSerial(const char *path);
+
 int XBoxControllerConnect(void);
 int XBoxControllerReConnect(void);
 int XBoxControllerDisConnect(void);
 
 int XBoxControllerRun(void);
 int XBoxControllerGetStructInfo(struct xboxinfo *info);
-void XBoxControllerStructInfoPrint();
+void XBoxControllerStructInfoPrint(void);
 
 #endif // __XBOXCONTROLLERLIB_H__
