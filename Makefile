@@ -13,10 +13,21 @@
 CC      = gcc
 
 # libevdev のヘッダは /usr/include/libevdev-1.0/ 以下にあり、既定の include パスに
-# 無いため pkg-config で解決する。pkg-config が無い/未登録の場合はハードコードに
-# フォールバックする ( sudo apt-get install -y libevdev-dev で導入される )。
-LIBEVDEV_CFLAGS := $(shell pkg-config --cflags libevdev 2>/dev/null || echo -I/usr/include/libevdev-1.0)
-LIBEVDEV_LIBS   := $(shell pkg-config --libs   libevdev 2>/dev/null || echo -levdev)
+# 無いため解決が必要。優先順位:
+#   1) LIBEVDEV_PREFIX を指定した場合 (root無しでホームに展開したとき等):
+#        make LIBEVDEV_PREFIX=$$HOME/.local/opt/libevdev
+#      -> そのツリーの include / lib を使い、実行時用に rpath も埋め込む。
+#   2) pkg-config が使える場合はそれで解決 ( sudo apt-get install -y libevdev-dev )。
+#   3) いずれも無ければ /usr の標準パスにフォールバック。
+ARCH := $(shell gcc -print-multiarch)
+
+ifdef LIBEVDEV_PREFIX
+  LIBEVDEV_CFLAGS := -I$(LIBEVDEV_PREFIX)/usr/include/libevdev-1.0
+  LIBEVDEV_LIBS   := -L$(LIBEVDEV_PREFIX)/usr/lib/$(ARCH) -Wl,-rpath,$(LIBEVDEV_PREFIX)/usr/lib/$(ARCH) -levdev
+else
+  LIBEVDEV_CFLAGS := $(shell pkg-config --cflags libevdev 2>/dev/null || echo -I/usr/include/libevdev-1.0)
+  LIBEVDEV_LIBS   := $(shell pkg-config --libs   libevdev 2>/dev/null || echo -levdev)
+endif
 
 CFLAGS  = -Wall -Iinclude $(LIBEVDEV_CFLAGS)
 LDFLAGS =
