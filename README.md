@@ -3,150 +3,145 @@
 Xbox ワイヤレスコントローラで **Freenove FNK0089**（Raspberry Pi Pico W 用
 メカナムホイールカー）を操縦するプロジェクト。
 
-## 2つの構成
+コントローラを **Pico W に直結して自走させる構成（推奨・動作確認済み）** と、
+**Raspberry Pi を中継させる構成** の 2 通りを収録しています。
 
-| | A. Pico W 自走（推奨・動作確認済み） | B. Raspberry Pi 経由 |
+## ディレクトリ構成
+
+```
+XBoxControllerDevice/
+├── firmware/
+│   ├── pico_w_bluepad32/     ★推奨: Pico W 自走ファーム (Bluepad32 / C / Pico SDK)
+│   │   ├── src/my_platform.c   モータ駆動 + スティック操作マッピング (本体)
+│   │   ├── CMakeLists.txt / pico_sdk_import.cmake / src/*.h
+│   │   ├── Dockerfile / docker-compose.yml / docker-flash.sh   Docker ビルド&書き込み
+│   │   ├── README.md           ビルド/書き込み/ペアリング手順
+│   │   └── DOCKER.md           Docker 手順
+│   └── pico_mecanum/         構成B用 Pico ファーム (Arduino / C++)
+│       ├── pico_mecanum.ino
+│       └── README.md
+├── include/ , src/ , examples/  構成B用 Raspberry Pi 側 libevdev ライブラリ (C)
+├── Makefile                     構成B (Pi側) のビルド
+└── README.md                    このファイル
+```
+
+## 2 つの構成
+
+| | **A. Pico W 自走**（推奨・実機確認済み） | **B. Raspberry Pi 経由** |
 |---|---|---|
-| 接続 | Xbox コン → **Bluetooth** → Pico W → モータ | Xbox コン → Pi(libevdev) → USB-CDC → Pico → モータ |
+| 接続 | Xbox コン → **Bluetooth(BLE)** → Pico W → モータ | Xbox コン → Pi(libevdev) → USB-CDC → Pico → モータ |
 | 走行時に Pi | **不要**（車体バッテリーで自走） | 必要（Pi が中継） |
-| 操作 | 左スティックで全方向移動＋右スティックで旋回（同時可） | D-Pad で前後/ストレイフ、LB/RB で旋回 |
-| 実装 | [`firmware/pico_w_bluepad32/`](firmware/pico_w_bluepad32/)（Bluepad32/C） | 下記＋[`firmware/pico_mecanum/`](firmware/pico_mecanum/)（Arduino/C） |
+| 操作 | 左スティックで全方向移動 + 右スティックで旋回（同時=カーブ） | D-Pad で前後/ストレイフ、LB/RB で旋回 |
+| Pico 実装 | [`firmware/pico_w_bluepad32/`](firmware/pico_w_bluepad32/)（Bluepad32/C） | [`firmware/pico_mecanum/`](firmware/pico_mecanum/)（Arduino/C++） |
+| ホスト実装 | 不要 | `src/` `include/` `examples/` + `Makefile`（libevdev/C） |
 
-**A（Pico W が Xbox コントローラと直接 BLE 接続して自走）** が実機で動作確認済みの
-本命構成です。ビルド・書き込み・ペアリング手順は
-[`firmware/pico_w_bluepad32/README.md`](firmware/pico_w_bluepad32/README.md) を参照。
+---
 
-以下は **B（Raspberry Pi 経由）** の構成の説明です。
+## 構成 A: Pico W 自走（推奨）
 
-## 概要（構成 B: Raspberry Pi 経由）
+Pico W 自身が Bluetooth ホストになり、Xbox コントローラと直接 BLE 接続してメカナムカーを
+操縦します。Raspberry Pi は開発・書き込み時のみ使用。
 
-Xbox コントローラ → Raspberry Pi（libevdev）→ USB-CDC シリアル →
-Pico（Freenove FNK0089）→ メカナム4輪。
+- **操作**: 左スティック=全方向移動（上=前進/下=後退/左右=平行移動、斜め可・傾き量で速度）、
+  右スティック左右=旋回、両方同時=走りながらカーブ。D-Pad/LB・RB は中立時フォールバック。
+  コントローラ切断でフェイルセーフ停止。
+- **ビルド/書き込み**: 手動（pico-sdk + Bluepad32）は
+  [`firmware/pico_w_bluepad32/README.md`](firmware/pico_w_bluepad32/README.md)、
+  **Docker（コンパイル〜書き込み）** は
+  [`firmware/pico_w_bluepad32/DOCKER.md`](firmware/pico_w_bluepad32/DOCKER.md) を参照。
 
-Raspberry Pi が Xbox Wireless Controller の入力を evdev 経由で読み取り、
-1文字のコマンド（`F`/`B`/`L`/`R`/`Q`/`E`/`S`）を Pico の native USB-CDC へ
-115200 8N1 で送信する。Pico 側ファームウェア（`firmware/pico_mecanum`）が
-コマンドを解釈し、4つの DC モータをメカナム走行の符号どおりに駆動する。
-
-## システム構成図
-
-```
- +---------------------+       Bluetooth        +------------------------+
- | Xbox Wireless       |  ===================>   | Raspberry Pi           |
- | Controller          |     (evdev / HID)       |  bin/xbox              |
- +---------------------+                         |  libxboxcontrollerlib  |
-                                                 |  + libevdev            |
-                                                 +-----------+------------+
-                                                             |
-                              USB-CDC (micro-USB ケーブル)   |
-                              115200 8N1  /dev/ttyACM0       |
-                                                             v
- +---------------------+                         +------------------------+
- | Mecanum 4 wheels    | <====================== | Raspberry Pi Pico W     |
- | FL  FR              |     H-bridge / PWM      |  firmware/pico_mecanum  |
- | BL  BR              |                         |  (Freenove FNK0089)     |
- +---------------------+                         +------------------------+
+```sh
+# Docker で: コンパイル -> BOOTSEL 誘発 -> 書き込み
+cd firmware/pico_w_bluepad32
+docker compose build       # ファームをコンパイル (通ればコンパイル成功)
+./docker-flash.sh          # Pico を BOOTSEL に落として picotool で書き込み
 ```
 
-## 必要環境
+- **ペアリング**: Pico 起動後、Xbox コントローラをペアリングモード（Xbox ボタンで起動→
+  ペアリングボタン長押しで速点滅）にすると自動接続。BLE 対応 Xbox コントローラが必要
+  （確認済み: 純正 Xbox Wireless Controller, 045e:02fd / Model 1708 / fw 4.8）。
 
-- Raspberry Pi 側
-  - `libevdev-dev`（ビルド・実行に必須）
+---
 
-    ```bash
-    sudo apt-get install -y libevdev-dev
-    ```
+## 構成 B: Raspberry Pi 経由
 
-  - `gcc` / `make`
-  - Bluetooth でペアリング済みの Xbox Wireless Controller
-- Pico 側
-  - Arduino IDE
-  - **arduino-pico core（earlephilhower）** … `firmware/pico_mecanum/README.md` 参照
+Xbox コントローラ → Raspberry Pi（libevdev）→ USB-CDC シリアル → Pico（Freenove FNK0089）
+→ メカナム 4 輪。Pi が evdev で D-Pad/ボタンを読み、1 文字コマンド（`F`/`B`/`L`/`R`/`Q`/`E`/`S`）
+を Pico の USB-CDC へ 115200 8N1 で送信し、Pico(Arduino) が駆動します。
 
-## 配線 / 接続
+```
+ Xbox Controller ─(Bluetooth/USB evdev)→ Raspberry Pi ─USB-CDC /dev/ttyACM0→ Pico(Arduino) → 4 wheels
+                                          bin/xbox + libevdev        F/B/L/R/Q/E/S + failsafe
+```
 
-- **リンク:** Pico 自身の micro-USB を Raspberry Pi に接続する（native USB-CDC）。
-  Pico(Arduino) 側では `Serial`、Pi 側では `/dev/ttyACM0`（無ければ
-  `/dev/ttyACM1`）として現れる。115200 baud, 8N1。
-- **モータピン（Freenove FNK0089）:** 各モータは H ブリッジで、2本のうち
-  「forward pin」に PWM・「reverse pin」に LOW を出すと前進する。forward pin は
-  必ずしも小さい方の GPIO ではない点に注意。
+### 必要環境 / ビルド（Pi 側）
 
-  | Motor | 位置        | forward pin | reverse pin |
-  |-------|-------------|-------------|-------------|
-  | M1 FL | Front-Left  | GP18        | GP19        |
-  | M2 BL | Back-Left   | GP21        | GP20        |
-  | M3 FR | Front-Right | GP7         | GP6         |
-  | M4 BR | Back-Right  | GP9         | GP8         |
-
-## ビルド手順
-
-### Raspberry Pi（ホスト側）
-
-```bash
+```sh
 sudo apt-get install -y libevdev-dev   # 一度だけ
-make                                   # bin/xbox を生成
+make                                   # bin/xbox を生成 (pkg-config で libevdev を解決)
 ```
 
-### Pico（ファームウェア）
+- libevdev を root なしでビルドしたい場合は `make LIBEVDEV_PREFIX=$HOME/.local/opt/libevdev`
+  （`apt-get download` + `dpkg -x` で展開したツリーを指定）。
 
-Arduino IDE で `firmware/pico_mecanum/pico_mecanum.ino` を開き、
-ボードに **Raspberry Pi Pico W** を選んで書き込む。詳細な手順（arduino-pico
-core のインストール等）は `firmware/pico_mecanum/README.md` を参照。
+### Pico（構成B ファーム）
 
-## 操作方法
+Arduino IDE で [`firmware/pico_mecanum/pico_mecanum.ino`](firmware/pico_mecanum/pico_mecanum.ino)
+を開き、ボードに **Raspberry Pi Pico W** を選んで書き込む。詳細は
+[`firmware/pico_mecanum/README.md`](firmware/pico_mecanum/README.md)。
 
-```bash
-make run                       # /dev/ttyACM0 -> /dev/ttyACM1 を自動で試す
-make run ARGS=/dev/ttyACM1
-# または直接:
+### 操作 / プロトコル（構成B）
+
+```sh
+make run                        # /dev/ttyACM0 -> /dev/ttyACM1 を自動で試す
 ./bin/xbox [シリアルデバイス]
 ```
 
-| 入力            | 動作                              |
-|-----------------|-----------------------------------|
-| D-Pad 上        | 前進                              |
-| D-Pad 下        | 後退                              |
-| D-Pad 左        | 左ストレイフ（平行移動、回転なし）|
-| D-Pad 右        | 右ストレイフ                      |
-| LB              | 左旋回（その場で CCW）            |
-| RB              | 右旋回（その場で CW）             |
-| 何も押さない    | 停止                              |
-| Xbox ボタン     | 終了                              |
+| 入力 | 動作 | | Pi→Pico バイト | 動作 |
+|---|---|---|---|---|
+| D-Pad 上/下 | 前進/後退 | | `F` / `B` | 前進 / 後退 |
+| D-Pad 左/右 | 左/右ストレイフ | | `L` / `R` | 左/右ストレイフ |
+| LB / RB | 左/右旋回(その場) | | `Q` / `E` | 左/右旋回(CCW/CW) |
+| Xbox ボタン | 終了 | | `S` | 停止 |
 
-- 上下（前後）が左右（ストレイフ）より優先される。
-- 旋回（LB/RB）は D-Pad が中立のときだけ有効。
-- D-Pad 制御の速度は固定で 60（0..100 のうち）。
+- コマンドは状態変化時 + 約 100 ms ごとのハートビートで送信。
+- **フェイルセーフ**: 有効なコマンドが 500 ms 届かないと Pico は全モータ停止。
 
-## プロトコル
+---
 
-Pi → Pico: 1文字の ASCII コマンド + `\n`、115200 8N1（USB-CDC）。
+## 検証済みハードウェア情報（両構成共通）
 
-| バイト | 動作                                |
-|--------|-------------------------------------|
-| `F`    | 前進                                |
-| `B`    | 後退                                |
-| `L`    | 左ストレイフ（平行移動）            |
-| `R`    | 右ストレイフ                        |
-| `Q`    | 左旋回 / CCW（その場旋回）          |
-| `E`    | 右旋回 / CW（その場旋回）           |
-| `S`    | 停止                                |
+Freenove FNK0089 のモータは H ブリッジで、2 本のうち「forward pin」に PWM・「reverse pin」に
+LOW を出すと前進します。**forward pin は必ずしも小さい方の GPIO ではありません**（実機検証済み）。
 
-- Pi は状態が変わるたびにコマンドを送信し、さらに現在のコマンドを
-  約 100 ms ごとにハートビートとして送り続ける。
-- **フェイルセーフ:** 有効なコマンドが 500 ms 届かないと Pico は全モータを停止する。
+| Motor | 位置 | forward pin | reverse pin |
+|-------|------|-------------|-------------|
+| M1 FL | Front-Left  | GP18 | GP19 |
+| M2 BL | Back-Left   | GP21 | GP20 |
+| M3 FR | Front-Right | GP7  | GP6  |
+| M4 BR | Back-Right  | GP9  | GP8  |
+
+メカナム符号行列（各輪 +1=前転 / -1=後転、実機検証済み）と合成式:
+
+```
+forward (+,+,+,+)  backward (-,-,-,-)
+strafe_left (FL-,FR-,BL+,BR+)  strafe_right (FL+,FR+,BL-,BR-)
+rotate_left/CCW (FL-,FR+,BL-,BR+)  rotate_right/CW (FL+,FR-,BL+,BR-)
+アナログ合成: FL=vx+vy+w  FR=vx+vy-w  BL=vx-vy+w  BR=vx-vy-w   (vx=前後, vy=右, w=CW)
+```
 
 ## トラブルシュート
 
-- **`Xbox controller not found`**
-  - Bluetooth でコントローラがペアリング/接続されているか確認する。
-  - `ls /dev/input/event*` にデバイスが現れるか、`sudo` 権限が必要でないか確認する。
-- **`/dev/ttyACM0` が無い / 車が動かない**
-  - Pico の micro-USB が Pi につながっているか、`ls -l /dev/ttyACM*` を確認する。
-  - デバイスが `/dev/ttyACM1` の場合は `make run ARGS=/dev/ttyACM1` を使う。
-  - ファームウェアが書き込まれているか（`firmware/pico_mecanum`）確認する。
-- **少し動いてすぐ止まる**
-  - 500 ms フェイルセーフの動作。ハートビートが届いていない（ケーブル/権限）
-    可能性がある。手動テストは `firmware/pico_mecanum/README.md` を参照。
-- **`libevdev/libevdev.h: No such file`**
-  - `sudo apt-get install -y libevdev-dev` を実行する。
+- **A: コントローラが繋がらない** → ペアリングモード（速点滅）にし直す。BLE 対応 Xbox
+  モデルか確認（古い USB 専用モデルは不可）。
+- **A: Docker の書き込みで BOOTSEL が見つからない** → Pico の BOOTSEL ボタンを押しながら
+  USB 挿し直し。詳細は `firmware/pico_w_bluepad32/DOCKER.md`。
+- **B: `Xbox controller not found`** → コントローラをペアリング/接続し `/dev/input/event*` を確認。
+- **B: `/dev/ttyACM0` が無い / 動かない** → Pico の USB が Pi に繋がっているか、`ls /dev/ttyACM*` を確認。
+- **B: `libevdev/libevdev.h: No such file`** → `sudo apt-get install -y libevdev-dev`
+  （または `make LIBEVDEV_PREFIX=...`）。
+
+## ライセンス
+
+`LICENSE` を参照。Bluepad32 例由来ファイル（`firmware/pico_w_bluepad32/src/main.c` 等）は
+Public Domain（Bluepad32 のヘッダ表記に従う）。

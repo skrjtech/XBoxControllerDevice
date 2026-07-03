@@ -1,9 +1,14 @@
-# Pi 側 (Makefile) 生成物
+# --- Pi 側 (Makefile) 生成物 ---
 /obj/
 /bin/
-# Pico ファーム ビルド生成物
+
+# --- Pico ファーム ビルド生成物 ---
 firmware/**/build/
+firmware/**/out/
 *.uf2
 *.elf
 *.bin
 *.o
+
+# --- エディタ/OS ---
+.DS_Store

@@ -1,0 +1,10 @@
+# ビルドに不要なものを除外 (COPY対象 src/ CMakeLists.txt pico_sdk_import.cmake は除外しない)
+build/
+out/
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-flash.sh
+*.md

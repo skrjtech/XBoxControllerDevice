@@ -1,0 +1,40 @@
+# Pico W (Freenove FNK0089) Bluepad32 firmware — build & flash
+#
+#   docker compose build                 # ファームをコンパイル (イメージに焼き込む=コンパイル検証)
+#   docker compose run --rm build        # 生成 uf2 を ./out/firmware.uf2 にコピー (任意/確認用)
+#   ./docker-flash.sh                     # BOOTSEL 誘発 -> Pico へ書き込み (下記 flash を使用)
+#
+# build と flash は同一イメージ (xbox-pico-fw) を共有する。書き込み元はイメージ内蔵の
+# /out/firmware.uf2 なので、flash は build サービスの実行(ホスト ./out)に依存しない。
+
+services:
+  # ---- コンパイル + (任意で)ホストへ uf2 を取り出す ----
+  build:
+    image: xbox-pico-fw
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # cp をユーザ uid で行い ./out/firmware.uf2 を root 所有にしない。
+    # 事前に `mkdir -p out` してユーザ所有の ./out を用意しておくこと。
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./out:/host-out
+    command: sh -c "cp /out/firmware.uf2 /host-out/firmware.uf2 && echo 'copied -> ./out/firmware.uf2'"
+
+  # ---- BOOTSEL 状態の Pico へ picotool で書き込む ----
+  flash:
+    image: xbox-pico-fw
+    build:                 # 同一 context/タグ。イメージ未ビルドでも run 時に自動ビルドされる
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never     # レジストリから pull しない (ローカルビルド専用イメージ)
+    # USB 書き込みは privileged を避け、USB デバイス(char major 189)だけ許可する最小権限。
+    # picotool(libusb) は /dev/bus/usb/* を直接叩く。BOOTSEL 中の Pico が必要。
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    # イメージ内蔵の uf2 を書き込み、-x で実行/再起動。
+    command: sh -c "picotool load -x /out/firmware.uf2"
+    # 権限や環境で libusb が届かない場合のフォールバックは privileged: true
+    # (device_cgroup_rules / volumes を消して privileged だけにする)。DOCKER.md 参照。
